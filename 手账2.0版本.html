@@ -1,0 +1,1646 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>你的手帐 📔 谁最懂你？</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Comic Sans MS", "Chalkboard SE", "Segoe Print", cursive, sans-serif;
+    background: #f0e8d8;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+  }
+  .phone {
+    width: 100%;
+    max-width: 420px;
+    min-height: 100vh;
+    background: #faf5e8;
+    box-shadow: 0 0 30px rgba(139,111,71,0.15);
+    overflow: hidden;
+    position: relative;
+    padding-bottom: 30px;
+  }
+  .page { display: none; padding: 20px; min-height: 100vh; }
+  .page.active { display: block; animation: fadeIn 0.4s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .brand { text-align: center; font-size: 13px; color: #c0a880; padding: 10px 0 0; }
+
+  .btn {
+    padding: 13px 30px; font-size: 16px; font-family: inherit;
+    background: linear-gradient(180deg, #ffd966 0%, #ffc93c 100%);
+    border: 3px solid #d4a017; border-radius: 30px; color: #6b4e2e;
+    cursor: pointer; box-shadow: 0 4px 0 #d4a017;
+    transition: all 0.1s; display: block; width: 100%; text-align: center; margin: 10px 0;
+  }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #d4a017; }
+  .btn-secondary { background: #fff; border-color: #c0a880; box-shadow: 0 4px 0 #c0a880; color: #8b6f47; }
+  .btn-secondary:active { box-shadow: 0 1px 0 #c0a880; }
+  .btn-small { padding: 8px 16px; font-size: 13px; width: auto; display: inline-block; }
+  .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .input-note {
+    width: 100%; padding: 12px 14px; font-size: 15px; font-family: inherit;
+    background: #fff9e0; border: 2px solid #e0d0a0; border-radius: 6px;
+    color: #4a3728; margin: 8px 0; outline: none;
+  }
+  .input-note:focus { border-color: #d4a017; background: #fff3c0; }
+
+  .card {
+    background: #fffdf5; border-radius: 8px; padding: 20px; margin: 15px 0;
+    box-shadow: 2px 3px 10px rgba(139,111,71,0.15); position: relative;
+  }
+  .card::before {
+    content: ''; position: absolute; top: -10px; left: 50%;
+    transform: translateX(-50%) rotate(-2deg); width: 80px; height: 20px;
+    background: rgba(255,182,193,0.5);
+  }
+
+  .question-block {
+    background: #fff9e0; border: 2px dashed #d4c090; border-radius: 8px;
+    padding: 15px; margin: 12px 0; position: relative;
+  }
+  .question-block .q-num {
+    position: absolute; top: -10px; left: 10px; background: #ffd966;
+    padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: bold;
+  }
+  .question-block .del-btn {
+    position: absolute; top: -10px; right: 10px; background: #f8d7da;
+    border: 2px solid #e8a0a8; color: #c05050; border-radius: 10px;
+    padding: 2px 8px; font-size: 11px; cursor: pointer; font-family: inherit;
+  }
+  .opt-row { display: flex; gap: 8px; margin: 6px 0; align-items: center; }
+  .opt-row input[type="text"] { flex: 1; }
+  .opt-row label { font-size: 12px; color: #8b6f47; white-space: nowrap; cursor: pointer; }
+
+  /* 翻页 */
+  .flip-container { perspective: 1200px; margin: 0 -5px; }
+  .quiz-paper {
+    background: #fffdf5; border-radius: 4px; padding: 25px 20px;
+    box-shadow: 2px 3px 8px rgba(139,111,71,0.15);
+    background-image: repeating-linear-gradient(
+      to bottom, transparent 0px, transparent 27px,
+      rgba(180,200,220,0.3) 27px, rgba(180,200,220,0.3) 28px);
+    min-height: 380px; position: relative;
+    transform-origin: left center; transform-style: preserve-3d; transition: transform 0.35s ease;
+  }
+  .quiz-paper.turning { transform: rotateY(80deg); box-shadow: -8px 3px 15px rgba(139,111,71,0.2); }
+
+  .option-btn {
+    display: block; width: 100%; padding: 12px 15px; margin-bottom: 10px;
+    font-size: 15px; font-family: inherit; text-align: left;
+    background: #fff9e0; border: 2px solid #e0d0a0; border-radius: 4px;
+    color: #4a3728; cursor: pointer; transition: all 0.2s;
+  }
+  .option-btn:hover { background: #fff3c0; transform: scale(1.01); }
+  .option-btn.correct { background: #d4edda; border-color: #82c99a; }
+  .option-btn.wrong { background: #f8d7da; border-color: #e8a0a8; animation: shake 0.4s; }
+  .option-btn:disabled { cursor: default; }
+  @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+  .progress { display: flex; justify-content: center; gap: 8px; margin: 15px 0; flex-wrap: wrap; }
+  .p-dot {
+    width: 26px; height: 26px; border-radius: 50%; background: #e8e0d0;
+    border: 2px dashed #c0a880; font-size: 14px;
+    display: flex; align-items: center; justify-content: center; transition: all 0.3s;
+  }
+  .p-dot.on { background: #ffd966; border-color: #d4a017; animation: pop 0.4s; }
+  @keyframes pop { 0% { transform: scale(0) rotate(-180deg); } 70% { transform: scale(1.3) rotate(10deg); } 100% { transform: scale(1) rotate(0); } }
+
+  .rank-item {
+    display: flex; align-items: center; padding: 10px 12px; margin: 6px 0;
+    background: #fff; border-radius: 8px; border: 1px solid #eee;
+  }
+  .rank-num {
+    width: 28px; height: 28px; border-radius: 50%; background: #e8e0d0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: bold; margin-right: 10px;
+  }
+  .rank-num.top1 { background: #ffd966; }
+  .rank-num.top2 { background: #e0e0e0; }
+  .rank-num.top3 { background: #e8c8a0; }
+  .rank-avatar { font-size: 20px; margin-right: 8px; }
+  .rank-name { flex: 1; font-size: 14px; color: #4a3728; }
+  .rank-score { font-size: 16px; font-weight: bold; color: #d4a017; }
+
+  .code-box {
+    background: #fff; border: 3px dashed #d4a017; border-radius: 12px;
+    padding: 20px; text-align: center; margin: 15px 0;
+  }
+  .code-text { font-size: 28px; font-weight: bold; color: #d4a017; letter-spacing: 4px; font-family: monospace; }
+
+  .center { text-align: center; }
+  .mt-10 { margin-top: 10px; }
+  .mt-20 { margin-top: 20px; }
+  .mb-10 { margin-bottom: 10px; }
+  .text-sm { font-size: 12px; color: #8b6f47; }
+  .text-title { font-size: 18px; color: #6b4e2e; font-weight: bold; margin-bottom: 10px; }
+  .text-hint { font-size: 12px; color: #b09070; margin: 8px 0; }
+
+  .cover {
+    width: 260px; height: 340px;
+    background: linear-gradient(135deg, #e8d5b7 0%, #d4b896 100%);
+    border-radius: 8px 14px 14px 8px; margin: 20px auto;
+    padding: 30px 20px; position: relative; transform: rotate(-2deg);
+    box-shadow: 8px 8px 0 rgba(139,111,71,0.15); text-align: center;
+  }
+  .cover::before {
+    content: ''; position: absolute; left: -10px; top: 0;
+    width: 14px; height: 100%;
+    background: repeating-linear-gradient(to bottom,
+      transparent 0, transparent 18px, #b8a080 18px, #b8a080 25px,
+      transparent 25px, transparent 36px);
+  }
+  .cover-bear { font-size: 60px; margin-bottom: 10px; animation: bearBounce 2s ease-in-out infinite; }
+  @keyframes bearBounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+  .cover-title { font-size: 24px; color: #6b4e2e; font-weight: bold; margin-top: 10px; }
+  .cover-sub { font-size: 13px; color: #8b6f47; margin-top: 15px; line-height: 1.6; }
+
+  .float-deco { position: absolute; font-size: 24px; animation: float 3s ease-in-out infinite; opacity: 0.6; }
+  @keyframes float { 0%,100% { transform: translateY(0) rotate(-5deg); } 50% { transform: translateY(-10px) rotate(5deg); } }
+
+  .falling-sticker {
+    position: absolute; font-size: 30px; pointer-events: none;
+    animation: stickerFall 1s ease forwards; z-index: 10;
+  }
+  @keyframes stickerFall {
+    0% { top: -40px; opacity: 0; transform: rotate(-180deg) scale(0.5); }
+    50% { opacity: 1; transform: rotate(0deg) scale(1.2); }
+    100% { top: 60%; opacity: 1; transform: rotate(5deg) scale(1); }
+  }
+
+  /* 横向滑动选动物 */
+  .avatar-scroll {
+    display: flex; gap: 10px; overflow-x: auto; padding: 10px 5px;
+    margin: 10px 0; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+  }
+  .avatar-scroll::-webkit-scrollbar { display: none; }
+  .avatar-option {
+    flex: 0 0 60px; height: 60px; border-radius: 50%; background: #fff9e0;
+    border: 2px solid #e0d0a0; display: flex; align-items: center; justify-content: center;
+    font-size: 32px; cursor: pointer; transition: all 0.2s; scroll-snap-align: center;
+  }
+  .avatar-option.selected {
+    border-color: #d4a017; background: #fff3c0;
+    transform: scale(1.15); box-shadow: 0 0 10px rgba(212,160,23,0.3);
+  }
+  .scroll-hint { text-align: center; font-size: 11px; color: #c0a880; margin-top: 2px; }
+
+  .mini-ads { margin-top: 30px; }
+  .mini-cards { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px; }
+  .mini-card {
+    flex: 0 0 90px; height: 90px; background: #fff; border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; font-size: 11px; color: #8b6f47;
+  }
+  .mini-card-emoji { font-size: 26px; margin-bottom: 4px; }
+
+  .loading { text-align: center; padding: 40px; color: #b09070; font-size: 14px; }
+
+  /* ===== 圣诞手帐样式 ===== */
+  .xmas-body { background: #1a472a; }
+  .xmas-phone { background: #f0f8e8; }
+  .xmas-cover {
+    width: 260px; height: 340px;
+    background: linear-gradient(135deg, #2d5a3d 0%, #1a472a 100%);
+    border-radius: 8px 14px 14px 8px; margin: 20px auto;
+    padding: 30px 20px; position: relative; transform: rotate(-2deg);
+    box-shadow: 8px 8px 0 rgba(0,0,0,0.2); text-align: center;
+  }
+  .xmas-cover::before {
+    content: ''; position: absolute; left: -10px; top: 0;
+    width: 14px; height: 100%;
+    background: repeating-linear-gradient(to bottom,
+      transparent 0, transparent 18px, #143620 18px, #143620 25px,
+      transparent 25px, transparent 36px);
+  }
+  .xmas-tree { font-size: 60px; margin-bottom: 10px; animation: treeShake 3s ease-in-out infinite; }
+  @keyframes treeShake { 0%,100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+  .xmas-title { font-size: 24px; color: #ffd700; font-weight: bold; margin-top: 10px; text-shadow: 2px 2px 0 #c41e3a; }
+  .xmas-sub { font-size: 13px; color: #a8d8a8; margin-top: 15px; line-height: 1.6; }
+  .xmas-btn {
+    padding: 13px 30px; font-size: 16px; font-family: inherit;
+    background: linear-gradient(180deg, #c41e3a 0%, #a01530 100%);
+    border: 3px solid #8b0000; border-radius: 30px; color: #fff;
+    cursor: pointer; box-shadow: 0 4px 0 #8b0000;
+    transition: all 0.1s; display: block; width: 100%; text-align: center; margin: 10px 0;
+  }
+  .xmas-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #8b0000; }
+  .xmas-btn-secondary { background: #fff; border-color: #2d5a3d; box-shadow: 0 4px 0 #2d5a3d; color: #2d5a3d; }
+  .xmas-btn-secondary:active { box-shadow: 0 1px 0 #2d5a3d; }
+  .xmas-input {
+    width: 100%; padding: 12px 14px; font-size: 15px; font-family: inherit;
+    background: #fff; border: 2px solid #c8e0c8; border-radius: 6px;
+    color: #1a472a; margin: 8px 0; outline: none;
+  }
+  .xmas-input:focus { border-color: #c41e3a; background: #fff8f8; }
+  .xmas-card {
+    background: #fff; border-radius: 8px; padding: 20px; margin: 15px 0;
+    box-shadow: 2px 3px 10px rgba(0,0,0,0.1);
+  }
+  /* 圣诞贺卡 */
+  .xmas-card-canvas {
+    position: relative; width: 100%; max-width: 360px; height: 480px;
+    margin: 20px auto; border-radius: 16px; overflow: hidden;
+    background: #fff;
+    border: 8px solid #c41e3a;
+    box-shadow: 0 8px 24px rgba(196,30,58,0.2);
+  }
+  .xmas-card-border {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    border: 4px dashed #1a6b3c;
+    pointer-events: none; z-index: 5;
+  }
+  .xmas-card-deco-top {
+    position: absolute; top: 10px; left: 0; right: 0;
+    text-align: center; font-size: 24px; z-index: 6;
+  }
+  .xmas-card-title {
+    position: absolute; top: 40px; left: 0; right: 0;
+    text-align: center; font-size: 18px; font-weight: bold;
+    color: #c41e3a; z-index: 6;
+  }
+  .xmas-card-area {
+    position: absolute; top: 80px; left: 20px; right: 20px; bottom: 60px;
+    background: #f0f8e8; border-radius: 8px; z-index: 1;
+  }
+  .xmas-card-footer {
+    position: absolute; bottom: 10px; left: 0; right: 0;
+    text-align: center; font-size: 14px; color: #1a6b3c; z-index: 6;
+  }
+  .xmas-sticker {
+    position: absolute; font-size: 28px; cursor: grab;
+    user-select: none; touch-action: none; z-index: 10;
+  }
+  .xmas-sticker:active { cursor: grabbing; transform: scale(1.2); }
+  .xmas-sticker-picker {
+    display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 15px 0;
+  }
+  .xmas-sticker-item {
+    width: 50px; height: 50px; border-radius: 50%; background: #fff;
+    border: 2px solid #c8e0c8; display: flex; align-items: center; justify-content: center;
+    font-size: 26px; cursor: pointer; transition: all 0.2s;
+  }
+  .xmas-sticker-item.selected {
+    border-color: #c41e3a; background: #fff0f0; transform: scale(1.15);
+    box-shadow: 0 0 10px rgba(196,30,58,0.3);
+  }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="brand">✨ 趣味手帐小站 ✨</div>
+
+  <!-- 首页（主平台） -->
+  <div class="page active" id="page-home">
+    <div class="cover">
+      <div class="float-deco" style="top:30px;left:10px;">🧸</div>
+      <div class="float-deco" style="top:50px;right:15px;animation-delay:0.5s;">⭐</div>
+      <div class="float-deco" style="bottom:80px;left:15px;animation-delay:1s;">🌷</div>
+      <div class="cover-bear">✨</div>
+      <div class="cover-title">趣味<br>手帐小站</div>
+      <div class="cover-sub">
+        出几道题，看看谁最懂你<br>
+        各种小玩法，等你来玩～<br><br>
+        <span style="font-size:11px;color:#a08060;">📢 公告：秘密手帐已上线！圣诞手帐即将开放</span>
+      </div>
+    </div>
+
+    <div class="text-title">🎮 选择你的玩法</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:15px 0;">
+      <button onclick="showPage('page-create')" style="background:#fff;border:none;border-radius:12px;padding:16px 12px;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <div style="font-size:36px;margin-bottom:8px;">📔</div>
+        <div style="font-size:14px;color:#4a3728;font-weight:bold;">秘密手帐</div>
+        <div style="font-size:11px;color:#a08060;margin-top:4px;">出几道关于你的题<br>看谁最懂你</div>
+        <span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:10px;margin-top:6px;background:#e8f5e9;color:#4caf50;">🔥 已上线</span>
+      </button>
+      <button onclick="showPage('page-xmas-create')" style="background:#fff;border:none;border-radius:12px;padding:16px 12px;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <div style="font-size:36px;margin-bottom:8px;">🎄</div>
+        <div style="font-size:14px;color:#1a472a;font-weight:bold;">圣诞手帐</div>
+        <div style="font-size:11px;color:#a08060;margin-top:4px;">出题让朋友答题<br>在你树上贴贴纸</div>
+        <span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:10px;margin-top:6px;background:#e8f5e9;color:#4caf50;">🔥 已上线</span>
+      </button>
+      <div style="background:#fff;border-radius:12px;padding:16px 12px;text-align:center;opacity:0.5;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <div style="font-size:36px;margin-bottom:8px;">💌</div>
+        <div style="font-size:14px;color:#4a3728;font-weight:bold;">匿名告白</div>
+        <div style="font-size:11px;color:#a08060;margin-top:4px;">匿名说出<br>你的心意</div>
+        <span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:10px;margin-top:6px;background:#f5f5f5;color:#999;">🔒 即将开放</span>
+      </div>
+      <div style="background:#fff;border-radius:12px;padding:16px 12px;text-align:center;opacity:0.5;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <div style="font-size:36px;margin-bottom:8px;">🧧</div>
+        <div style="font-size:14px;color:#4a3728;font-weight:bold;">新春手帐</div>
+        <div style="font-size:11px;color:#a08060;margin-top:4px;">新年主题<br>祝福手帐</div>
+        <span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:10px;margin-top:6px;background:#f5f5f5;color:#999;">🔒 即将开放</span>
+      </div>
+    </div>
+
+    <button class="btn btn-secondary" onclick="showPage('page-join')">🔑 输入邀请码答题</button>
+    <button class="btn btn-secondary" onclick="showMyHandbooks()">📚 我的手帐列表</button>
+  </div>
+
+  <!-- 个人中心 -->
+  <div class="page" id="page-profile">
+    <div class="text-title">👤 我的记录</div>
+    <div class="text-hint">这里记录了你创建的手帐和答过的题：</div>
+    <div id="profile-content"></div>
+    <button class="btn btn-small btn-secondary mt-10" onclick="showPage('page-home')">← 返回首页</button>
+  </div>
+
+  <!-- ===== 圣诞手帐页面 ===== -->
+  <!-- 圣诞手帐创建页 -->
+  <div class="page" id="page-xmas-create">
+    <div class="text-title">🎄 创建你的圣诞树</div>
+    <div class="text-hint">出题让朋友答题，他们答完可以在你树上贴贴纸～</div>
+    <input class="input-note" id="xmas-title" placeholder="给你的圣诞树起个名字（如：小Q的秘密圣诞树）" maxlength="20">
+    <input class="input-note" id="xmas-creator" placeholder="你的名字（如：小Q）" maxlength="10">
+    <div class="text-hint mt-10">👇 出题（至少3题，最多10题），点选正确答案：</div>
+    <div id="xmas-question-list"></div>
+    <button class="btn btn-small btn-secondary" onclick="addXmasQuestion()">＋ 添加一题</button>
+    <button class="btn mt-10" onclick="saveXmasTree()">🎄 生成我的圣诞树邀请码</button>
+    <button class="btn btn-small btn-secondary" onclick="showPage('page-home')">← 返回</button>
+  </div>
+
+  <!-- 圣诞手帐成功页 -->
+  <div class="page" id="page-xmas-code">
+    <div class="center">
+      <div style="font-size:50px;" class="mt-20">🎄</div>
+      <div class="text-title mt-10">你的圣诞树做好啦！</div>
+      <div class="text-sm mb-10">把邀请码发给朋友，他们答完题就能在你树上贴贴纸啦</div>
+      <div class="code-box">
+        <div class="text-sm">邀请码</div>
+        <div class="code-text" id="xmas-display-code">XXXXXX</div>
+      </div>
+      <div class="text-sm mb-10">
+        或者直接把这个链接发给朋友：<br>
+        <span style="color:#d4a017;word-break:break-all;" id="xmas-share-link"></span>
+      </div>
+      <button class="btn mt-10" onclick="viewXmasTree()">👀 看看我的圣诞树</button>
+      <button class="btn btn-small btn-secondary" onclick="showPage('page-home')">← 返回首页</button>
+    </div>
+  </div>
+
+  <!-- 圣诞手帐答题者介绍页 -->
+  <div class="page" id="page-xmas-intro">
+    <div class="center">
+      <div class="xmas-card">
+        <div style="font-size:50px;" id="xmas-intro-avatar">🎄</div>
+        <div class="text-title mt-10" id="xmas-intro-title">加载中...</div>
+        <div class="text-sm" id="xmas-intro-stats"></div>
+      </div>
+      <div class="text-hint">写你的名字（会贴在圣诞树上哦）：</div>
+      <input class="input-note" id="xmas-answerer-name" placeholder="你的名字" maxlength="10">
+      <button class="btn mt-10" onclick="startXmasQuiz()">开始答题 ✏️</button>
+      <button class="btn btn-small btn-secondary" onclick="showPage('page-join')">← 换个邀请码</button>
+    </div>
+  </div>
+
+  <!-- 圣诞手帐答题中 -->
+  <div class="page" id="page-xmas-quiz">
+    <div class="text-sm mb-10" id="xmas-quiz-header">第 1 / 10 题</div>
+    <div class="flip-container">
+      <div class="quiz-paper" id="xmas-quiz-paper">
+        <div class="question-text" id="xmas-quiz-qtext" style="font-size:17px;color:#1a472a;margin-bottom:20px;font-weight:bold;"></div>
+        <div id="xmas-quiz-options"></div>
+      </div>
+    </div>
+    <div class="progress" id="xmas-progress"></div>
+  </div>
+
+  <!-- 圣诞手帐选贴纸页 -->
+  <div class="page" id="page-xmas-sticker">
+    <div class="center">
+      <div class="text-title">🎉 答题完成！</div>
+      <div style="font-size:36px;color:#c41e3a;font-weight:bold;" id="xmas-score">8 / 10</div>
+      <div class="text-hint mt-10">选一个贴纸贴在他的圣诞树上吧：</div>
+      <div class="avatar-scroll" id="xmas-sticker-picker" style="justify-content:flex-start;">
+        <div class="avatar-option selected" data-sticker="⭐">⭐</div>
+        <div class="avatar-option" data-sticker="🌙">🌙</div>
+        <div class="avatar-option" data-sticker="🐑">🐑</div>
+        <div class="avatar-option" data-sticker="🐰">🐰</div>
+        <div class="avatar-option" data-sticker="🐹">🐹</div>
+        <div class="avatar-option" data-sticker="🐦">🐦</div>
+        <div class="avatar-option" data-sticker="🐱">🐱</div>
+        <div class="avatar-option" data-sticker="🐶">🐶</div>
+        <div class="avatar-option" data-sticker="🐻">🐻</div>
+      </div>
+      <div class="scroll-hint">← 左右滑动选择 →</div>
+      <button class="btn mt-10" onclick="goWriteMessage()">下一步：写留言 →</button>
+    </div>
+  </div>
+
+  <!-- 圣诞手帐写留言页 -->
+  <div class="page" id="page-xmas-message">
+    <div class="center">
+      <div class="text-title">💌 写一句留言</div>
+      <div class="text-hint mt-10">15个字以内，贴在贺卡上：</div>
+      <input class="input-note" id="xmas-message" placeholder="写下你的祝福..." maxlength="15" style="text-align:center;font-size:16px;">
+      <div class="text-hint" id="xmas-msg-count">0 / 15</div>
+      <button class="btn mt-10" onclick="goPlaceSticker()">下一步：贴到贺卡上 →</button>
+      <button class="btn btn-small btn-secondary" onclick="showPage('page-xmas-sticker')">← 重新选贴纸</button>
+    </div>
+  </div>
+
+  <!-- 圣诞手帐摆放贴纸页 -->
+  <div class="page" id="page-xmas-place">
+    <div class="center">
+      <div class="text-title">🎄 把贴纸拖到圣诞树上</div>
+      <div class="text-hint">拖动贴纸放到你喜欢的位置，还可以调大小：</div>
+      <div class="xmas-card-canvas" id="xmas-place-canvas">
+        <div class="xmas-card-border"></div>
+        <div class="xmas-card-deco-top">🎄 ⭐ 🎁 ⭐ 🎄</div>
+        <div class="xmas-card-title">圣诞贺卡</div>
+        <div class="xmas-card-area"></div>
+        <div class="xmas-card-footer">🎅 Merry Christmas 🎅</div>
+        <div class="xmas-sticker" id="xmas-drag-sticker" style="left:50%;top:50%;transform:translate(-50%,-50%);font-size:32px;">⭐</div>
+      </div>
+      <div style="margin:15px 0;">
+        <div class="text-hint">贴纸大小</div>
+        <input type="range" id="xmas-sticker-size" min="20" max="60" value="32" style="width:80%;" oninput="document.getElementById('xmas-drag-sticker').style.fontSize=this.value+'px'">
+      </div>
+      <button class="btn mt-10" onclick="confirmSticker()">✅ 贴好啦！</button>
+      <button class="btn btn-small btn-secondary" onclick="showPage('page-xmas-sticker')">← 重新选贴纸</button>
+    </div>
+  </div>
+
+  <!-- 圣诞手帐圣诞树展示页 -->
+  <div class="page" id="page-xmas-tree">
+    <div class="center">
+      <div class="text-title" id="xmas-tree-title">🎄 我的圣诞树</div>
+      <div class="text-sm" id="xmas-tree-stats">还没有人来贴贴纸</div>
+      <div class="xmas-card-canvas" id="xmas-tree-canvas">
+        <div class="xmas-card-border"></div>
+        <div class="xmas-card-deco-top">🎄 ⭐ 🎁 ⭐ 🎄</div>
+        <div class="xmas-card-title" id="xmas-card-title">我的圣诞贺卡</div>
+        <div class="xmas-card-area" id="xmas-card-area"></div>
+        <div class="xmas-card-footer">🎅 Merry Christmas 🎅</div>
+      </div>
+      <button class="btn mt-10" onclick="saveXmasTreeImage()">📸 保存圣诞树图片</button>
+      <button class="btn btn-small btn-secondary" onclick="showPage('page-home')">← 返回首页</button>
+    </div>
+  </div>
+
+  <!-- 创建手帐 -->
+  <div class="page" id="page-create">
+    <div class="text-title">📔 创建你的手帐</div>
+    <div class="text-hint">先选一个代表你的小动物头像：</div>
+    <div class="avatar-scroll" id="avatar-select">
+      <div class="avatar-option selected" data-avatar="🐻">🐻</div>
+      <div class="avatar-option" data-avatar="🐑">🐑</div>
+      <div class="avatar-option" data-avatar="🐱">🐱</div>
+      <div class="avatar-option" data-avatar="🐰">🐰</div>
+      <div class="avatar-option" data-avatar="🦊">🦊</div>
+      <div class="avatar-option" data-avatar="🐹">🐹</div>
+      <div class="avatar-option" data-avatar="🐶">🐶</div>
+      <div class="avatar-option" data-avatar="🐍">🐍</div>
+    </div>
+    <div class="scroll-hint">← 左右滑动选择 →</div>
+    <input class="input-note" id="handbook-title" placeholder="给你的手帐起个名字（如：小Q的奇奇怪怪小本本）" maxlength="20">
+    <input class="input-note" id="creator-name" placeholder="你的名字（如：小Q）" maxlength="10">
+    <input class="input-note" id="creator-mood" placeholder="今日心情（如：窝着刷电影🎬）" maxlength="20">
+    <div class="text-hint mt-10">👇 出题（至少3题，最多10题），点选正确答案：</div>
+    <div id="question-list"></div>
+    <button class="btn btn-small btn-secondary" onclick="addQuestion()">＋ 添加一题</button>
+    <button class="btn mt-10" id="btn-save" onclick="saveHandbook()">🐻 生成我的手帐邀请码</button>
+    <button class="btn btn-small btn-secondary" onclick="showPage('page-home')">← 返回</button>
+  </div>
+
+  <!-- 邀请码成功 -->
+  <div class="page" id="page-code">
+    <div class="center">
+      <div style="font-size:50px;" class="mt-20">🎉</div>
+      <div class="text-title mt-10">你的手帐做好啦！</div>
+      <div class="text-sm mb-10">把邀请码发给朋友，他们就能答题啦</div>
+      <div class="code-box">
+        <div class="text-sm">邀请码</div>
+        <div class="code-text" id="display-code">XXXXXX</div>
+      </div>
+      <div class="text-sm mb-10">
+        或者直接把这个链接发给朋友：<br>
+        <span style="color:#d4a017;word-break:break-all;" id="share-link"></span>
+      </div>
+      <button class="btn mt-10" onclick="viewMyRanking()">👀 看看谁在答我的题</button>
+      <button class="btn btn-small btn-secondary" onclick="showPage('page-home')">← 返回首页</button>
+    </div>
+  </div>
+
+  <!-- 我的手帐列表 -->
+  <div class="page" id="page-mylist">
+    <div class="text-title">📚 我创建的手帐</div>
+    <div class="text-hint">这里是你在这台设备上创建过的所有手帐：</div>
+    <div id="my-list"></div>
+    <button class="btn btn-small btn-secondary mt-10" onclick="showPage('page-home')">← 返回首页</button>
+  </div>
+
+  <!-- 输入邀请码 -->
+  <div class="page" id="page-join">
+    <div class="text-title">🔑 输入邀请码</div>
+    <div class="text-hint">朋友发给你的6位邀请码</div>
+    <input class="input-note" id="input-code" placeholder="输入6位邀请码" maxlength="6" style="text-align:center;letter-spacing:3px;">
+    <button class="btn mt-10" onclick="joinByCode()">打开手帐 ✨</button>
+    <button class="btn btn-small btn-secondary" onclick="showPage('page-home')">← 返回</button>
+  </div>
+
+  <!-- 答题者介绍页 -->
+  <div class="page" id="page-intro">
+    <div class="center">
+      <div class="card">
+        <div style="font-size:50px;" id="intro-avatar">📔</div>
+        <div class="text-title mt-10" id="intro-title">加载中...</div>
+        <div class="text-sm" id="intro-mood"></div>
+        <div class="text-hint mt-10" id="intro-stats"></div>
+      </div>
+      <div class="text-hint">写你的名字（会贴在手帐上哦）：</div>
+      <input class="input-note" id="answerer-name" placeholder="你的名字" maxlength="10">
+      <button class="btn mt-10" onclick="startAnswering()">开始答题 ✏️</button>
+      <button class="btn btn-small btn-secondary" onclick="showPage('page-join')">← 换个邀请码</button>
+    </div>
+  </div>
+
+  <!-- 答题中 -->
+  <div class="page" id="page-quiz">
+    <div class="text-sm mb-10" id="quiz-header">第 1 / 10 题</div>
+    <div class="flip-container">
+      <div class="quiz-paper" id="quiz-paper">
+        <div class="question-text" id="quiz-qtext" style="font-size:17px;color:#4a3728;margin-bottom:20px;font-weight:bold;"></div>
+        <div id="quiz-options"></div>
+      </div>
+    </div>
+    <div class="progress" id="progress"></div>
+  </div>
+
+  <!-- 结果页 -->
+  <div class="page" id="page-result">
+    <div class="center">
+      <div class="card">
+        <div style="font-size:50px;" id="r-emoji">🎉</div>
+        <div class="text-title mt-10" id="r-title">答题完成！</div>
+        <div style="font-size:36px;color:#d4a017;font-weight:bold;" id="r-score">8 / 10</div>
+        <div class="text-sm mt-10" id="r-desc"></div>
+      </div>
+      <div class="text-title mt-20">🏆 手帐排行榜</div>
+      <div id="rank-list"></div>
+      <button class="btn mt-20" onclick="shareResult()">📤 分享我的成绩</button>
+      <button class="btn btn-small btn-secondary" onclick="showPage('page-home')">← 返回首页</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ==========================================
+//  Supabase 配置
+// ==========================================
+const SUPABASE_URL = 'https://muefsshjozmycunsamhf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_HvAMYhlyFMAzfnRO-KcTzQ_9vUsKTvj';
+
+var db = null;
+try {
+  if (typeof supabase !== 'undefined' && supabase.createClient) {
+    db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  } else {
+    alert('数据库库加载失败，请刷新页面试试');
+  }
+} catch(e) {
+  console.error('Supabase初始化失败', e);
+  alert('数据库连接失败：' + e.message);
+}
+
+// ==========================================
+//  状态
+// ==========================================
+var selectedAvatar = '🐻';
+var currentNotebook = null;   // 当前手帐数据
+var currentNotebookId = null; // 手帐数据库id
+var editingNotebookId = null; // 编辑模式：记录正在编辑的手帐ID
+var editingCreatedAt = null;  // 编辑模式：记录原来那条记录的创建时间
+var currentQuestions = [];    // 当前手帐的题目
+var currentQIdx = 0;
+var currentScore = 0;
+var answererName = '';
+
+// 头像选择
+document.querySelectorAll('.avatar-option').forEach(function(el) {
+  el.onclick = function() {
+    document.querySelectorAll('.avatar-option').forEach(function(o){ o.classList.remove('selected'); });
+    el.classList.add('selected');
+    selectedAvatar = el.dataset.avatar;
+  };
+});
+
+// ==========================================
+//  创建手帐
+// ==========================================
+function addQuestion() {
+  var list = document.getElementById('question-list');
+  var idx = list.children.length;
+  var block = document.createElement('div');
+  block.className = 'question-block';
+  block.innerHTML =
+    '<div class="q-num">第 ' + (idx+1) + ' 题</div>' +
+    '<button class="del-btn" onclick="this.parentElement.remove()">删除</button>' +
+    '<input class="input-note q-text" placeholder="题目（如：我最喜欢吃什么？）" maxlength="50">' +
+    '<div class="opt-row"><input class="input-note opt-text" placeholder="选项A" maxlength="20"><label><input type="radio" name="correct'+idx+'"> 正确</label></div>' +
+    '<div class="opt-row"><input class="input-note opt-text" placeholder="选项B" maxlength="20"><label><input type="radio" name="correct'+idx+'"> 正确</label></div>' +
+    '<div class="opt-row"><input class="input-note opt-text" placeholder="选项C" maxlength="20"><label><input type="radio" name="correct'+idx+'"> 正确</label></div>' +
+    '<div class="opt-row"><input class="input-note opt-text" placeholder="选项D" maxlength="20"><label><input type="radio" name="correct'+idx+'"> 正确</label></div>';
+  list.appendChild(block);
+}
+for (var i = 0; i < 3; i++) addQuestion();
+
+function genCode() {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var c = '';
+  for (var i = 0; i < 6; i++) c += chars[Math.floor(Math.random()*chars.length)];
+  return c;
+}
+
+async function saveHandbook() {
+  var creator = document.getElementById('creator-name').value.trim();
+  var mood = document.getElementById('creator-mood').value.trim();
+  var title = document.getElementById('handbook-title').value.trim();
+  if (!creator) { alert('先写你的名字哦～'); return; }
+  if (!title) title = creator + '的秘密手帐';
+
+  // 收集题目
+  var blocks = document.querySelectorAll('.question-block');
+  var questions = [];
+  for (var i = 0; i < blocks.length; i++) {
+    var b = blocks[i];
+    var qText = b.querySelector('.q-text').value.trim();
+    var opts = b.querySelectorAll('.opt-text');
+    var radios = b.querySelectorAll('input[type=radio]');
+    var answerIdx = -1;
+    for (var r = 0; r < radios.length; r++) { if (radios[r].checked) answerIdx = r; }
+    if (!qText) continue;
+    var options = [];
+    for (var o = 0; o < 4; o++) {
+      var v = opts[o].value.trim();
+      if (v) options.push(v);
+    }
+    if (options.length < 2) continue;
+    if (answerIdx < 0) answerIdx = 0;
+    questions.push({ q: qText, options: options, answer: answerIdx });
+  }
+  if (questions.length < 3) { alert('至少要有3道题才能生成手帐哦～'); return; }
+
+  var btn = document.getElementById('btn-save');
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+
+  try {
+    if (editingNotebookId) {
+      // ===== 编辑模式：新建一条，更新localStorage里的邀请码 =====
+      // 生成新邀请码
+      var newCode = genCode();
+      var { data: nb2, error: nbErr2 } = await db
+        .from('notebooks')
+        .insert([{ code: newCode, creator: creator, title: title, avatar: selectedAvatar, mood: mood || '神秘心情' }])
+        .select()
+        .single();
+      if (nbErr2) throw nbErr2;
+
+      // 插入新题目
+      var qInserts2 = questions.map(function(q, i) {
+        return { notebook_id: nb2.id, question: q.q, options: q.options, answer_index: q.answer, order_num: i };
+      });
+      await db.from('questions').insert(qInserts2);
+
+      // 更新localStorage里的旧邀请码为新的
+      var myList = JSON.parse(localStorage.getItem('my_handbooks') || '[]');
+      for (var mi = 0; mi < myList.length; mi++) {
+        if (myList[mi].createdAt === editingCreatedAt) {
+          myList[mi].code = newCode;
+          myList[mi].title = title;
+          break;
+        }
+      }
+      localStorage.setItem('my_handbooks', JSON.stringify(myList));
+
+      editingNotebookId = null;
+      editingCreatedAt = null;
+      btn.textContent = '🐻 生成我的手帐邀请码';
+
+      // 跳到成功页，显示新邀请码
+      document.getElementById('display-code').textContent = newCode;
+      document.getElementById('share-link').textContent =
+        window.location.origin + window.location.pathname + '?id=' + newCode;
+      showPage('page-code');
+    } else {
+      // ===== 新建模式 =====
+      // 生成邀请码（确保不重复）
+      var code = genCode();
+      // 插入笔记本
+      var { data: nb, error: nbErr } = await db
+        .from('notebooks')
+        .insert([{ code: code, creator: creator, title: title, avatar: selectedAvatar, mood: mood || '神秘心情' }])
+        .select()
+        .single();
+      if (nbErr) throw nbErr;
+
+      // 插入题目
+      var qInserts = questions.map(function(q, i) {
+        return { notebook_id: nb.id, question: q.q, options: q.options, answer_index: q.answer, order_num: i };
+      });
+      var { error: qErr } = await db.from('questions').insert(qInserts);
+      if (qErr) throw qErr;
+
+      document.getElementById('display-code').textContent = code;
+      document.getElementById('share-link').textContent =
+        window.location.origin + window.location.pathname + '?id=' + code;
+      currentNotebookId = nb.id;
+      currentNotebook = nb;
+
+      // 存入localStorage，记录我创建过的手帐
+      var myList = JSON.parse(localStorage.getItem('my_handbooks') || '[]');
+      myList.push({ code: code, title: title, createdAt: new Date().toISOString() });
+      localStorage.setItem('my_handbooks', JSON.stringify(myList));
+
+      showPage('page-code');
+    }
+  } catch (e) {
+    alert('保存失败：' + e.message);
+  } finally {
+    btn.disabled = false;
+    if (!editingNotebookId) btn.textContent = '🐻 生成我的手帐邀请码';
+  }
+}
+
+// ==========================================
+//  编辑手帐
+// ==========================================
+async function editHandbook(code) {
+  try {
+    // 读取手帐信息
+    var { data: nb, error: nbErr } = await db
+      .from('notebooks')
+      .select('*')
+      .eq('code', code)
+      .single();
+    if (nbErr) throw nbErr;
+
+    // 读取题目
+    var { data: qs, error: qErr } = await db
+      .from('questions')
+      .select('*')
+      .eq('notebook_id', nb.id)
+      .order('order_num');
+    if (qErr) throw qErr;
+
+    // 进入创建页面，填充数据
+    editingNotebookId = nb.id;
+    // 找到localStorage里这条记录的createdAt
+    var myList = JSON.parse(localStorage.getItem('my_handbooks') || '[]');
+    for (var mi = 0; mi < myList.length; mi++) {
+      if (myList[mi].code === code) {
+        editingCreatedAt = myList[mi].createdAt;
+        break;
+      }
+    }
+    document.getElementById('handbook-title').value = nb.title || '';
+    document.getElementById('creator-name').value = nb.creator || '';
+    document.getElementById('creator-mood').value = nb.mood || '';
+
+    // 设置头像选中
+    document.querySelectorAll('.avatar-option').forEach(function(el) {
+      el.classList.remove('selected');
+      if (el.dataset.avatar === nb.avatar) el.classList.add('selected');
+    });
+    selectedAvatar = nb.avatar || '🐻';
+
+    // 清空并填充题目
+    document.getElementById('question-list').innerHTML = '';
+    for (var i = 0; i < qs.length; i++) {
+      addQuestion();
+      var blocks = document.querySelectorAll('.question-block');
+      var b = blocks[blocks.length - 1];
+      b.querySelector('.q-text').value = qs[i].question;
+      var opts = b.querySelectorAll('.opt-text');
+      for (var o = 0; o < qs[i].options.length; o++) {
+        if (opts[o]) opts[o].value = qs[i].options[o];
+      }
+      var radios = b.querySelectorAll('input[type=radio]');
+      if (radios[qs[i].answer_index]) radios[qs[i].answer_index].checked = true;
+    }
+
+    // 改保存按钮文字
+    document.getElementById('btn-save').textContent = '💾 保存修改';
+    showPage('page-create');
+  } catch (e) {
+    alert('加载失败：' + e.message);
+  }
+}
+
+// ==========================================
+//  答题流程
+// ==========================================
+async function joinByCode() {
+  var code = document.getElementById('input-code').value.trim().toUpperCase();
+  if (!code) { alert('请输入邀请码'); return; }
+
+  try {
+    // 查笔记本
+    var { data: nbs, error: nbErr } = await db
+      .from('notebooks')
+      .select('*')
+      .eq('code', code)
+      .single();
+    if (nbErr || !nbs) { alert('这个邀请码不存在哦～'); return; }
+
+    // 判断是圣诞手帐还是秘密手帐
+    if (nbs.avatar === '🎄' || nbs.game_type === 'xmas') {
+      // 圣诞手帐流程
+      xmasNotebook = nbs;
+      xmasNotebookId = nbs.id;
+      var { data: xqs } = await db
+        .from('questions')
+        .select('*')
+        .eq('notebook_id', nbs.id)
+        .order('order_num');
+      xmasQuestions = (xqs || []).map(function(q) {
+        return { question: q.question, options: q.options, answer: q.answer_index };
+      });
+      var { count: xansCount } = await db
+        .from('answers')
+        .select('*', { count: 'exact', head: true })
+        .eq('notebook_id', nbs.id);
+      document.getElementById('xmas-intro-title').textContent = nbs.title || (nbs.creator + '的圣诞贺卡');
+      document.getElementById('xmas-intro-stats').textContent = '已有 ' + (xansCount||0) + ' 人贴了贴纸';
+      showPage('page-xmas-intro');
+    } else {
+      // 秘密手帐流程
+      currentNotebook = nbs;
+      currentNotebookId = nbs.id;
+
+      // 查题目
+      var { data: qs, error: qErr } = await db
+        .from('questions')
+        .select('*')
+        .eq('notebook_id', nbs.id)
+        .order('order_num');
+      if (qErr) throw qErr;
+      currentQuestions = qs || [];
+
+      // 查答题人数
+      var { count: ansCount } = await db
+        .from('answers')
+        .select('*', { count: 'exact', head: true })
+        .eq('notebook_id', nbs.id);
+
+      document.getElementById('intro-avatar').textContent = nbs.avatar || '📔';
+      document.getElementById('intro-title').textContent = nbs.title || (nbs.creator + '的秘密手帐');
+      document.getElementById('intro-mood').textContent = '🎀 心情：' + (nbs.mood || '');
+      document.getElementById('intro-stats').textContent = '已有 ' + (ansCount||0) + ' 人翻过这本手帐';
+      showPage('page-intro');
+    }
+  } catch (e) {
+    alert('加载失败：' + e.message);
+  }
+}
+
+function startAnswering() {
+  answererName = document.getElementById('answerer-name').value.trim();
+  if (!answererName) { alert('先写你的名字哦～'); return; }
+  currentQIdx = 0;
+  currentScore = 0;
+  initProgress();
+  renderQuestion();
+  showPage('page-quiz');
+}
+
+function initProgress() {
+  var p = document.getElementById('progress');
+  p.innerHTML = '';
+  for (var i = 0; i < currentQuestions.length; i++) {
+    var d = document.createElement('div');
+    d.className = 'p-dot';
+    d.id = 'pd-' + i;
+    d.textContent = '🐾';
+    p.appendChild(d);
+  }
+}
+
+function renderQuestion() {
+  var q = currentQuestions[currentQIdx];
+  document.getElementById('quiz-header').textContent =
+    '第 ' + (currentQIdx+1) + ' / ' + currentQuestions.length + ' 题 · ' + (currentNotebook.title||'');
+  document.getElementById('quiz-qtext').textContent = q.question;
+
+  var box = document.getElementById('quiz-options');
+  box.innerHTML = '';
+  var options = q.options;
+  for (var i = 0; i < options.length; i++) {
+    (function(idx) {
+      var btn = document.createElement('button');
+      btn.className = 'option-btn';
+      btn.textContent = String.fromCharCode(65+idx) + '. ' + options[idx];
+      btn.onclick = function() { selectAnswer(idx, btn); };
+      box.appendChild(btn);
+    })(i);
+  }
+}
+
+function selectAnswer(idx, btnEl) {
+  var q = currentQuestions[currentQIdx];
+  var allBtns = document.querySelectorAll('.option-btn');
+
+  if (idx === q.answer_index) {
+    btnEl.classList.add('correct');
+    currentScore++;
+    var dot = document.getElementById('pd-' + currentQIdx);
+    if (dot) { dot.classList.add('on'); dot.textContent = '⭐'; }
+    spawnSticker();
+  } else {
+    btnEl.classList.add('wrong');
+    allBtns[q.answer_index].classList.add('correct');
+  }
+  allBtns.forEach(function(b) { b.disabled = true; });
+
+  setTimeout(function() {
+    var paper = document.getElementById('quiz-paper');
+    paper.classList.add('turning');
+    setTimeout(function() {
+      currentQIdx++;
+      if (currentQIdx >= currentQuestions.length) {
+        paper.classList.remove('turning');
+        setTimeout(finishQuiz, 350);
+      } else {
+        renderQuestion();
+        paper.classList.remove('turning');
+      }
+    }, 350);
+  }, 1000);
+}
+
+function spawnSticker() {
+  var paper = document.getElementById('quiz-paper');
+  var stickers = ['⭐', '🌷', '✨', '🍯', '🌟', '💛', '🐾', '🌸'];
+  var s = document.createElement('div');
+  s.className = 'falling-sticker';
+  s.textContent = stickers[Math.floor(Math.random()*stickers.length)];
+  s.style.left = (20 + Math.random()*60) + '%';
+  paper.appendChild(s);
+  setTimeout(function() { s.remove(); }, 1000);
+}
+
+async function finishQuiz() {
+  // 保存答题记录到云端
+  try {
+    await db.from('answers').insert([{
+      notebook_id: currentNotebookId,
+      answerer_name: answererName,
+      avatar: selectedAvatar,
+      score: currentScore
+    }]);
+    // 存到localStorage：我答过的
+    var myAnswer = JSON.parse(localStorage.getItem('my_answer') || '[]');
+    myAnswer.push({
+      code: currentNotebook.code,
+      title: currentNotebook.title,
+      creator: currentNotebook.creator,
+      score: currentScore,
+      total: currentQuestions.length
+    });
+    localStorage.setItem('my_answer', JSON.stringify(myAnswer));
+  } catch (e) { console.error('保存答题失败', e); }
+
+  var total = currentQuestions.length;
+  document.getElementById('r-score').textContent = currentScore + ' / ' + total;
+  var ratio = currentScore / total;
+
+  if (ratio === 1) {
+    document.getElementById('r-emoji').textContent = '👑';
+    document.getElementById('r-title').textContent = '完美！你就是最懂' + currentNotebook.creator + '的人！';
+    document.getElementById('r-desc').textContent = currentNotebook.creator + '说：你简直是我肚子里的蛔虫！';
+  } else if (ratio >= 0.7) {
+    document.getElementById('r-emoji').textContent = '🎉';
+    document.getElementById('r-title').textContent = '很了解' + currentNotebook.creator + '嘛！';
+    document.getElementById('r-desc').textContent = '不愧是好朋友～';
+  } else if (ratio >= 0.5) {
+    document.getElementById('r-emoji').textContent = '😊';
+    document.getElementById('r-title').textContent = '及格了，继续加油';
+    document.getElementById('r-desc').textContent = '还有一些小细节可以再了解哦';
+  } else {
+    document.getElementById('r-emoji').textContent = '🤔';
+    document.getElementById('r-title').textContent = '嗯...你真的是朋友吗？';
+    document.getElementById('r-desc').textContent = currentNotebook.creator + '表示很受伤...';
+  }
+
+  await renderRanking();
+  showPage('page-result');
+}
+
+async function renderRanking() {
+  var box = document.getElementById('rank-list');
+  box.innerHTML = '<div class="loading">加载排行榜...</div>';
+  try {
+    var { data: ans } = await db
+      .from('answers')
+      .select('*')
+      .eq('notebook_id', currentNotebookId)
+      .order('score', { ascending: false });
+
+    if (!ans || ans.length === 0) {
+      box.innerHTML = '<div class="text-sm center">还没有人答题，快去分享吧～</div>';
+      return;
+    }
+    box.innerHTML = '';
+    for (var i = 0; i < ans.length; i++) {
+      var a = ans[i];
+      var div = document.createElement('div');
+      div.className = 'rank-item';
+      var cls = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '';
+      div.innerHTML =
+        '<div class="rank-num ' + cls + '">' + (i+1) + '</div>' +
+        '<div class="rank-avatar">' + (a.avatar || '🐾') + '</div>' +
+        '<div class="rank-name">' + a.answerer_name + '</div>' +
+        '<div class="rank-score">' + a.score + '题</div>';
+      box.appendChild(div);
+    }
+  } catch (e) {
+    box.innerHTML = '<div class="text-sm center">排行榜加载失败</div>';
+  }
+}
+
+async function viewMyRanking() {
+  document.getElementById('r-emoji').textContent = '📔';
+  document.getElementById('r-title').textContent = (currentNotebook.title || '我的手帐') + ' 排行榜';
+  document.getElementById('r-score').textContent = '查看中...';
+  document.getElementById('r-desc').textContent = '邀请码：' + currentNotebook.code;
+  await renderRanking();
+  showPage('page-result');
+}
+
+// ==========================================
+//  我的手帐列表
+// ==========================================
+async function loadProfile() {
+  showPage('page-profile');
+  var box = document.getElementById('profile-content');
+  box.innerHTML = '<div class="loading">加载中...</div>';
+
+  var searchKey = (window._profileSearch || '').toLowerCase();
+
+  var html = '';
+  html += '<input class="input-note" id="profile-search" placeholder="🔍 搜索手帐标题或邀请码..." oninput="window._profileSearch=this.value;loadProfile()">';
+
+  // 我创建的
+  var myCreate = JSON.parse(localStorage.getItem('my_handbooks') || '[]');
+  var normalCreate = myCreate.filter(function(item){ return !item.type || item.type !== 'xmas'; });
+  var xmasCreate = myCreate.filter(function(item){ return item.type === 'xmas'; });
+
+  // 搜索过滤
+  if (searchKey) {
+    normalCreate = normalCreate.filter(function(item){
+      return (item.title||'').toLowerCase().indexOf(searchKey) >= 0 || (item.code||'').toLowerCase().indexOf(searchKey) >= 0;
+    });
+    xmasCreate = xmasCreate.filter(function(item){
+      return (item.title||'').toLowerCase().indexOf(searchKey) >= 0 || (item.code||'').toLowerCase().indexOf(searchKey) >= 0;
+    });
+  }
+
+  html += '<div style="font-size:15px;font-weight:bold;color:#6b4e2e;margin:15px 0 8px;">📔 我创建的 · 秘密手帐（' + normalCreate.length + '）</div>';
+  if (normalCreate.length === 0) {
+    html += '<div class="text-sm center">你还没有创建过秘密手帐</div>';
+  } else {
+    var showNormal = window._showAllNormal ? normalCreate : normalCreate.slice(0, 3);
+    for (var i = 0; i < showNormal.length; i++) {
+      var item = showNormal[i];
+      html += '<div style="background:#fff;border-radius:10px;padding:14px;margin:8px 0;box-shadow:0 2px 6px rgba(0,0,0,0.06);">' +
+        '<div style="font-size:14px;font-weight:bold;color:#4a3728;">' + (item.title || '未命名') + '</div>' +
+        '<div style="font-size:12px;color:#8b6f47;margin:4px 0;">邀请码：' + item.code + '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:8px;">' +
+        '<button class="btn btn-small" style="flex:1;" onclick="viewHandbookRanking(\'' + item.code + '\')">👀 排行榜</button>' +
+        '<button class="btn btn-small btn-secondary" style="flex:1;" onclick="editHandbook(\'' + item.code + '\')">✏️ 编辑</button>' +
+        '</div></div>';
+    }
+    if (normalCreate.length > 3) {
+      html += '<div class="text-hint center" style="margin-top:8px;cursor:pointer;" onclick="window._showAllNormal=!window._showAllNormal;loadProfile()">' + (window._showAllNormal ? '▲ 收起' : '▼ 展开全部 ' + normalCreate.length + ' 条') + '</div>';
+    }
+  }
+
+  html += '<div style="font-size:15px;font-weight:bold;color:#1a6b3c;margin:20px 0 8px;">🎄 我创建的 · 圣诞手帐（' + xmasCreate.length + '）</div>';
+  if (xmasCreate.length === 0) {
+    html += '<div class="text-sm center">你还没有创建过圣诞手帐</div>';
+  } else {
+    var showXmas = window._showAllXmas ? xmasCreate : xmasCreate.slice(0, 3);
+    for (var xi = 0; xi < showXmas.length; xi++) {
+      var xitem = showXmas[xi];
+      html += '<div style="background:#fff;border-radius:10px;padding:14px;margin:8px 0;box-shadow:0 2px 6px rgba(0,0,0,0.06);">' +
+        '<div style="font-size:14px;font-weight:bold;color:#4a3728;">' + (xitem.title || '未命名') + '</div>' +
+        '<div style="font-size:12px;color:#8b6f47;margin:4px 0;">邀请码：' + xitem.code + '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:8px;">' +
+        '<button class="btn btn-small" style="flex:1;" onclick="viewXmasTreeByCode(\'' + xitem.code + '\')">🎄 看贺卡</button>' +
+        '</div></div>';
+    }
+    if (xmasCreate.length > 3) {
+      html += '<div class="text-hint center" style="margin-top:8px;cursor:pointer;" onclick="window._showAllXmas=!window._showAllXmas;loadProfile()">' + (window._showAllXmas ? '▲ 收起' : '▼ 展开全部 ' + xmasCreate.length + ' 条') + '</div>';
+    }
+  }
+
+  // 我答过的
+  var myAnswer = JSON.parse(localStorage.getItem('my_answer') || '[]');
+  var normalAnswer = myAnswer.filter(function(a){return !a.type || a.type !== 'xmas';});
+  var xmasAnswer = myAnswer.filter(function(a){return a.type === 'xmas';});
+
+  // 搜索过滤
+  if (searchKey) {
+    normalAnswer = normalAnswer.filter(function(a){
+      return (a.title||'').toLowerCase().indexOf(searchKey) >= 0 || (a.creator||'').toLowerCase().indexOf(searchKey) >= 0;
+    });
+    xmasAnswer = xmasAnswer.filter(function(a){
+      return (a.title||'').toLowerCase().indexOf(searchKey) >= 0 || (a.creator||'').toLowerCase().indexOf(searchKey) >= 0;
+    });
+  }
+
+  html += '<div style="font-size:15px;font-weight:bold;color:#6b4e2e;margin:20px 0 8px;">✏️ 我答过的 · 秘密手帐（' + normalAnswer.length + '）</div>';
+  if (normalAnswer.length === 0) {
+    html += '<div class="text-sm center">你还没有答过别人的秘密手帐</div>';
+  } else {
+    var showAns = window._showAllAns ? normalAnswer : normalAnswer.slice(0, 3);
+    for (var j = 0; j < showAns.length; j++) {
+      var a = showAns[j];
+      html += '<div style="background:#fff;border-radius:10px;padding:14px;margin:8px 0;box-shadow:0 2px 6px rgba(0,0,0,0.06);">' +
+        '<div style="font-size:14px;font-weight:bold;color:#4a3728;">' + (a.title || '手帐') + '</div>' +
+        '<div style="font-size:12px;color:#8b6f47;margin:4px 0;">关于：' + (a.creator||'') + ' ｜ 得分：' + a.score + '/' + a.total + '</div>' +
+        '</div>';
+    }
+    if (normalAnswer.length > 3) {
+      html += '<div class="text-hint center" style="margin-top:8px;cursor:pointer;" onclick="window._showAllAns=!window._showAllAns;loadProfile()">' + (window._showAllAns ? '▲ 收起' : '▼ 展开全部 ' + normalAnswer.length + ' 条') + '</div>';
+    }
+  }
+
+  html += '<div style="font-size:15px;font-weight:bold;color:#1a6b3c;margin:20px 0 8px;">🎄 我答过的 · 圣诞手帐（' + xmasAnswer.length + '）</div>';
+  if (xmasAnswer.length === 0) {
+    html += '<div class="text-sm center">你还没有答过别人的圣诞手帐</div>';
+  } else {
+    var showXans = window._showAllXans ? xmasAnswer : xmasAnswer.slice(0, 3);
+    for (var xa = 0; xa < showXans.length; xa++) {
+      var xainfo = showXans[xa];
+      html += '<div style="background:#fff;border-radius:10px;padding:14px;margin:8px 0;box-shadow:0 2px 6px rgba(0,0,0,0.06);">' +
+        '<div style="font-size:14px;font-weight:bold;color:#4a3728;">' + (xainfo.title || '圣诞贺卡') + '</div>' +
+        '<div style="font-size:12px;color:#8b6f47;margin:4px 0;">关于：' + (xainfo.creator||'') + ' ｜ 我贴了：' + (xainfo.sticker||'⭐') + '</div>' +
+        '</div>';
+    }
+    if (xmasAnswer.length > 3) {
+      html += '<div class="text-hint center" style="margin-top:8px;cursor:pointer;" onclick="window._showAllXans=!window._showAllXans;loadProfile()">' + (window._showAllXans ? '▲ 收起' : '▼ 展开全部 ' + xmasAnswer.length + ' 条') + '</div>';
+    }
+  }
+
+  box.innerHTML = html;
+}
+
+async function showMyHandbooks() {
+  loadProfile();
+}
+
+// 从列表里点进去看某本手帐的排行榜
+async function viewHandbookRanking(code) {
+  try {
+    var { data: nb } = await db
+      .from('notebooks')
+      .select('*')
+      .eq('code', code)
+      .single();
+    if (!nb) { alert('手帐不存在'); return; }
+
+    if (nb.game_type === 'xmas' || nb.avatar === '🎄') {
+      // 圣诞手帐：显示贺卡
+      xmasNotebookId = nb.id;
+      xmasNotebook = nb;
+      await viewXmasTree();
+    } else {
+      // 秘密手帐：显示排行榜
+      currentNotebook = nb;
+      currentNotebookId = nb.id;
+      await viewMyRanking();
+    }
+  } catch (e) {
+    alert('加载失败：' + e.message);
+  }
+}
+
+// 通过邀请码看圣诞贺卡
+async function viewXmasTreeByCode(code) {
+  try {
+    var { data: nb } = await db
+      .from('notebooks')
+      .select('*')
+      .eq('code', code)
+      .single();
+    if (!nb) { alert('贺卡不存在'); return; }
+    xmasNotebookId = nb.id;
+    xmasNotebook = nb;
+    await viewXmasTree();
+  } catch (e) {
+    alert('加载失败：' + e.message);
+  }
+}
+
+function shareResult() {
+  var text = '我答对了' + currentScore + '道关于' + currentNotebook.creator + '的题！你呢？快来试试：' +
+    window.location.origin + window.location.pathname + '?id=' + currentNotebook.code;
+  if (navigator.share) {
+    navigator.share({ title: '手帐答题', text: text });
+  } else {
+    prompt('复制下面的链接分享给朋友：', text);
+  }
+}
+
+function showPage(id) {
+  var pages = document.querySelectorAll('.page');
+  pages.forEach(function(p){ p.classList.remove('active'); });
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+
+// ==========================================
+//  圣诞手帐逻辑
+// ==========================================
+var xmasQuestions = [];
+var xmasCurrentScore = 0;
+var xmasCurrentQIdx = 0;
+var xmasNotebook = null;
+var xmasNotebookId = null;
+var xmasSelectedSticker = '⭐';
+var xmasStickerX = 50;
+var xmasStickerY = 50;
+
+// 圣诞手帐加题
+function addXmasQuestion() {
+  xmasQuestions.push({ question: '', options: ['', '', '', ''], answer: 0 });
+  renderXmasQuestions();
+}
+
+function renderXmasQuestions() {
+  var box = document.getElementById('xmas-question-list');
+  box.innerHTML = '';
+  for (var i = 0; i < xmasQuestions.length; i++) {
+    (function(idx) {
+      var q = xmasQuestions[idx];
+      var div = document.createElement('div');
+      div.className = 'question-block';
+      div.innerHTML =
+        '<div class="q-num">第' + (idx+1) + '题</div>' +
+        '<button class="del-btn" onclick="delXmasQuestion(' + idx + ')">删除</button>' +
+        '<input class="input-note q-text" placeholder="题目内容" value="' + q.question.replace(/"/g,'&quot;') + '" oninput="xmasQuestions[' + idx + '].question=this.value">' +
+        '<div class="opt-row"><input type="radio" name="xans' + idx + '" ' + (q.answer===0?'checked':'') + ' onchange="xmasQuestions[' + idx + '].answer=0"><input class="input-note opt-text" placeholder="选项A" value="' + q.options[0].replace(/"/g,'&quot;') + '" oninput="xmasQuestions[' + idx + '].options[0]=this.value"></div>' +
+        '<div class="opt-row"><input type="radio" name="xans' + idx + '" ' + (q.answer===1?'checked':'') + ' onchange="xmasQuestions[' + idx + '].answer=1"><input class="input-note opt-text" placeholder="选项B" value="' + q.options[1].replace(/"/g,'&quot;') + '" oninput="xmasQuestions[' + idx + '].options[1]=this.value"></div>' +
+        '<div class="opt-row"><input type="radio" name="xans' + idx + '" ' + (q.answer===2?'checked':'') + ' onchange="xmasQuestions[' + idx + '].answer=2"><input class="input-note opt-text" placeholder="选项C" value="' + q.options[2].replace(/"/g,'&quot;') + '" oninput="xmasQuestions[' + idx + '].options[2]=this.value"></div>' +
+        '<div class="opt-row"><input type="radio" name="xans' + idx + '" ' + (q.answer===3?'checked':'') + ' onchange="xmasQuestions[' + idx + '].answer=3"><input class="input-note opt-text" placeholder="选项D" value="' + q.options[3].replace(/"/g,'&quot;') + '" oninput="xmasQuestions[' + idx + '].options[3]=this.value"></div>';
+      box.appendChild(div);
+    })(i);
+  }
+}
+
+function delXmasQuestion(idx) {
+  xmasQuestions.splice(idx, 1);
+  renderXmasQuestions();
+}
+
+// 保存圣诞树
+async function saveXmasTree() {
+  var title = document.getElementById('xmas-title').value.trim();
+  var creator = document.getElementById('xmas-creator').value.trim();
+  if (!creator) { alert('先写你的名字哦～'); return; }
+  if (!title) title = creator + '的圣诞树';
+
+  var validQs = xmasQuestions.filter(function(q) {
+    return q.question && q.options.filter(function(o){return o;}).length >= 2;
+  });
+  if (validQs.length < 3) { alert('至少要有3道题哦～'); return; }
+
+  try {
+    var code = genCode();
+    var { data: nb, error: nbErr } = await db
+      .from('notebooks')
+      .insert([{ code: code, creator: creator, title: title, avatar: '🎄', mood: '圣诞快乐', game_type: 'xmas' }])
+      .select()
+      .single();
+    if (nbErr) throw nbErr;
+
+    var qInserts = validQs.map(function(q, i) {
+      var opts = q.options.filter(function(o){return o;});
+      return { notebook_id: nb.id, question: q.question, options: opts, answer_index: q.answer, order_num: i };
+    });
+    await db.from('questions').insert(qInserts);
+
+    document.getElementById('xmas-display-code').textContent = code;
+    document.getElementById('xmas-share-link').textContent =
+      window.location.origin + window.location.pathname + '?id=' + code;
+    xmasNotebookId = nb.id;
+    xmasNotebook = nb;
+
+    // 存到localStorage
+    var myList = JSON.parse(localStorage.getItem('my_handbooks') || '[]');
+    myList.push({ code: code, title: title, createdAt: new Date().toISOString(), type: 'xmas' });
+    localStorage.setItem('my_handbooks', JSON.stringify(myList));
+
+    showPage('page-xmas-code');
+  } catch (e) {
+    alert('保存失败：' + e.message);
+  }
+}
+
+// 圣诞手帐答题
+async function startXmasQuiz() {
+  var name = document.getElementById('xmas-answerer-name').value.trim();
+  if (!name) { alert('先写你的名字哦～'); return; }
+  xmasCurrentScore = 0;
+  xmasCurrentQIdx = 0;
+  renderXmasQuestion();
+  showPage('page-xmas-quiz');
+}
+
+function renderXmasQuestion() {
+  var q = xmasQuestions[xmasCurrentQIdx];
+  document.getElementById('xmas-quiz-header').textContent =
+    '第 ' + (xmasCurrentQIdx+1) + ' / ' + xmasQuestions.length + ' 题';
+  document.getElementById('xmas-quiz-qtext').textContent = q.question;
+  var box = document.getElementById('xmas-quiz-options');
+  box.innerHTML = '';
+  for (var i = 0; i < q.options.length; i++) {
+    (function(idx) {
+      var btn = document.createElement('button');
+      btn.className = 'option-btn';
+      btn.textContent = String.fromCharCode(65+idx) + '. ' + q.options[idx];
+      btn.onclick = function() { selectXmasAnswer(idx, btn); };
+      box.appendChild(btn);
+    })(i);
+  }
+}
+
+function selectXmasAnswer(idx, btnEl) {
+  var q = xmasQuestions[xmasCurrentQIdx];
+  var allBtns = document.querySelectorAll('#page-xmas-quiz .option-btn');
+  if (idx === q.answer) {
+    btnEl.classList.add('correct');
+    xmasCurrentScore++;
+  } else {
+    btnEl.classList.add('wrong');
+    allBtns[q.answer].classList.add('correct');
+  }
+  allBtns.forEach(function(b) { b.disabled = true; });
+
+  setTimeout(function() {
+    xmasCurrentQIdx++;
+    if (xmasCurrentQIdx >= xmasQuestions.length) {
+      finishXmasQuiz();
+    } else {
+      renderXmasQuestion();
+    }
+  }, 1000);
+}
+
+function finishXmasQuiz() {
+  document.getElementById('xmas-score').textContent = xmasCurrentScore + ' / ' + xmasQuestions.length;
+  showPage('page-xmas-sticker');
+}
+
+// 选贴纸
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('avatar-option') && e.target.closest('#page-xmas-sticker')) {
+    document.querySelectorAll('#page-xmas-sticker .avatar-option').forEach(function(el) {
+      el.classList.remove('selected');
+    });
+    e.target.classList.add('selected');
+    xmasSelectedSticker = e.target.dataset.sticker;
+  }
+});
+
+function goPlaceSticker() {
+  document.getElementById('xmas-drag-sticker').textContent = xmasSelectedSticker;
+  showPage('page-xmas-place');
+  loadExistingStickers();
+}
+
+// 加载贺卡上已有的贴纸（其他人贴的）
+async function loadExistingStickers() {
+  var canvas = document.getElementById('xmas-place-canvas');
+  canvas.querySelectorAll('.xmas-sticker-existing').forEach(function(el){ el.remove(); });
+
+  if (!xmasNotebookId) return;
+  try {
+    var { data: ans } = await db
+      .from('answers')
+      .select('*')
+      .eq('notebook_id', xmasNotebookId);
+    if (ans) {
+      for (var i = 0; i < ans.length; i++) {
+        (function(a) {
+          var s = document.createElement('div');
+          s.className = 'xmas-sticker xmas-sticker-existing';
+          s.textContent = a.avatar || '⭐';
+          s.style.left = (a.sticker_x || 50) + '%';
+          s.style.top = (a.sticker_y || 50) + '%';
+          s.style.fontSize = (a.sticker_size || 32) + 'px';
+          s.style.transform = 'translate(-50%,-50%)';
+          s.style.opacity = '0.7';
+          s.style.zIndex = '5';
+          canvas.appendChild(s);
+        })(ans[i]);
+      }
+    }
+  } catch (e) { console.error(e); }
+}
+
+function goWriteMessage() {
+  showPage('page-xmas-message');
+}
+
+// 留言字数统计
+document.addEventListener('input', function(e) {
+  if (e.target.id === 'xmas-message') {
+    document.getElementById('xmas-msg-count').textContent = e.target.value.length + ' / 15';
+  }
+});
+
+// 拖拽贴纸
+var dragging = false;
+document.addEventListener('DOMContentLoaded', function() {
+  var sticker = document.getElementById('xmas-drag-sticker');
+  if (!sticker) return;
+
+  function onStart(clientX, clientY) {
+    dragging = true;
+    sticker.style.zIndex = 100;
+  }
+  function onMove(clientX, clientY) {
+    if (!dragging) return;
+    var rect = document.getElementById('xmas-place-canvas').getBoundingClientRect();
+    var x = ((clientX - rect.left) / rect.width) * 100;
+    var y = ((clientY - rect.top) / rect.height) * 100;
+    x = Math.max(5, Math.min(x, 95));
+    y = Math.max(5, Math.min(y, 95));
+    sticker.style.left = x + '%';
+    sticker.style.top = y + '%';
+    sticker.style.transform = 'translate(-50%,-50%)';
+    xmasStickerX = x;
+    xmasStickerY = y;
+  }
+  function onEnd() {
+    dragging = false;
+  }
+
+  sticker.addEventListener('mousedown', function(e) { e.preventDefault(); onStart(e.clientX, e.clientY); });
+  document.addEventListener('mousemove', function(e) { onMove(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', onEnd);
+
+  sticker.addEventListener('touchstart', function(e) { onStart(e.touches[0].clientX, e.touches[0].clientY); });
+  document.addEventListener('touchmove', function(e) { onMove(e.touches[0].clientX, e.touches[0].clientY); });
+  document.addEventListener('touchend', onEnd);
+});
+
+// 确认贴纸
+async function confirmSticker() {
+  try {
+    var size = document.getElementById('xmas-sticker-size').value;
+    var msg = document.getElementById('xmas-message').value.trim() || '';
+    await db.from('answers').insert([{
+      notebook_id: xmasNotebookId,
+      answerer_name: document.getElementById('xmas-answerer-name').value.trim(),
+      avatar: xmasSelectedSticker,
+      score: xmasCurrentScore,
+      sticker_x: Math.round(xmasStickerX),
+      sticker_y: Math.round(xmasStickerY),
+      sticker_size: parseInt(size),
+      message: msg
+    }]);
+    // 存到localStorage：我答过的圣诞手帐
+    var myAnswer = JSON.parse(localStorage.getItem('my_answer') || '[]');
+    myAnswer.push({
+      code: xmasNotebook.code,
+      title: xmasNotebook.title,
+      creator: xmasNotebook.creator,
+      score: xmasCurrentScore,
+      total: xmasQuestions.length,
+      sticker: xmasSelectedSticker,
+      type: 'xmas'
+    });
+    localStorage.setItem('my_answer', JSON.stringify(myAnswer));
+    alert('贴纸贴好啦！🎉');
+    showPage('page-home');
+  } catch (e) {
+    alert('保存失败：' + e.message);
+  }
+}
+
+// 查看圣诞树
+async function viewXmasTree() {
+  showPage('page-xmas-tree');
+  var canvas = document.getElementById('xmas-tree-canvas');
+  canvas.querySelectorAll('.xmas-sticker-placed').forEach(function(el){ el.remove(); });
+
+  if (!xmasNotebookId) {
+    var code = document.getElementById('xmas-display-code').textContent.trim();
+    if (code && code !== 'XXXXXX') {
+      var { data: nb } = await db.from('notebooks').select('*').eq('code', code).single();
+      if (nb) {
+        xmasNotebookId = nb.id;
+        xmasNotebook = nb;
+      }
+    }
+  }
+
+  if (!xmasNotebookId) {
+    document.getElementById('xmas-tree-stats').textContent = '还没有创建圣诞树';
+    return;
+  }
+
+  document.getElementById('xmas-card-title').textContent = '🎄 ' + (xmasNotebook.title || '我的圣诞贺卡');
+
+  var { data: ans } = await db
+    .from('answers')
+    .select('*')
+    .eq('notebook_id', xmasNotebookId);
+
+  document.getElementById('xmas-tree-stats').textContent =
+    (ans ? ans.length : 0) + ' 个朋友给你贴了贴纸';
+
+  if (ans) {
+    for (var i = 0; i < ans.length; i++) {
+      (function(a) {
+        var s = document.createElement('div');
+        s.className = 'xmas-sticker xmas-sticker-placed';
+        s.textContent = a.avatar || '⭐';
+        s.style.left = (a.sticker_x || 50) + '%';
+        s.style.top = (a.sticker_y || 50) + '%';
+        s.style.fontSize = (a.sticker_size || 32) + 'px';
+        s.style.transform = 'translate(-50%,-50%)';
+        s.style.cursor = 'pointer';
+        s.style.zIndex = '10';
+        s.onclick = function() {
+          alert(a.answerer_name + ' 的留言：\n「' + (a.message || '（没有留言）') + '」\n答对了 ' + a.score + ' 题');
+        };
+        canvas.appendChild(s);
+      })(ans[i]);
+    }
+  }
+}
+
+// 保存圣诞树图片
+function saveXmasTreeImage() {
+  alert('保存图片功能需要用html2canvas库，后续版本会加上～\n现在可以先截图分享哦！');
+}
+
+// URL参数自动进入答题
+window.onload = async function() {
+  showPage('page-home'); // 先显示首页，防止卡住
+
+  if (!db) return; // 如果数据库没连上，就停在首页
+
+  var params = new URLSearchParams(window.location.search);
+  var id = params.get('id');
+  if (id) {
+    try {
+      var { data: nbs } = await db
+        .from('notebooks')
+        .select('*')
+        .eq('code', id.toUpperCase())
+        .single();
+      if (nbs) {
+        currentNotebook = nbs;
+        currentNotebookId = nbs.id;
+        var { data: qs } = await db
+          .from('questions')
+          .select('*')
+          .eq('notebook_id', nbs.id)
+          .order('order_num');
+
+        // 判断是圣诞手帐还是秘密手帐：用头像🎄判断最可靠
+        if (nbs.avatar === '🎄' || nbs.game_type === 'xmas') {
+          // 圣诞手帐
+          xmasNotebook = nbs;
+          xmasNotebookId = nbs.id;
+          xmasQuestions = (qs || []).map(function(q) {
+            return { question: q.question, options: q.options, answer: q.answer_index };
+          });
+          var { count: xmasAnsCount } = await db
+            .from('answers')
+            .select('*', { count: 'exact', head: true })
+            .eq('notebook_id', nbs.id);
+          document.getElementById('xmas-intro-title').textContent = nbs.title || (nbs.creator + '的圣诞树');
+          document.getElementById('xmas-intro-stats').textContent = '已有 ' + (xmasAnsCount||0) + ' 人给你贴了贴纸';
+          showPage('page-xmas-intro');
+        } else {
+          // 秘密手帐
+          currentQuestions = qs || [];
+          var { count: ansCount } = await db
+            .from('answers')
+            .select('*', { count: 'exact', head: true })
+            .eq('notebook_id', nbs.id);
+          document.getElementById('intro-avatar').textContent = nbs.avatar || '📔';
+          document.getElementById('intro-title').textContent = nbs.title || (nbs.creator + '的秘密手帐');
+          document.getElementById('intro-mood').textContent = '🎀 心情：' + (nbs.mood || '');
+          document.getElementById('intro-stats').textContent = '已有 ' + (ansCount||0) + ' 人翻过这本手帐';
+          showPage('page-intro');
+        }
+      }
+    } catch (e) { console.error(e); }
+  }
+};
+</script>
+</body>
+</html>
